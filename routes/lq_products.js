@@ -2,7 +2,7 @@ const express = require('express')
 const router = express.Router()
 
 const mongoose = require('mongoose');
-mongoose.connect('mongodb://localhost/mydb', { useNewUrlParser: true   });
+mongoose.connect('mongodb://localhost/mydbAli', { useNewUrlParser: true   });
 
 const Lq_product = mongoose.model('lq_products', { name: String, quantity: Number});
 
