@@ -17,7 +17,7 @@ var conn5 = mongoose.createConnection('mongodb://localhost/mydbEl');
 
 
 
-const TransactionM = conn2.model('transactions', { id:String , clientPhone: String,
+const TransactionM = conn2.model('transactions', { id:Number , clientPhone: String,
     product: [{
     name:String,
     quantity: Number,
@@ -25,7 +25,7 @@ const TransactionM = conn2.model('transactions', { id:String , clientPhone: Stri
     totals: Number
 }],
 total:Number,
-date :Date,
+date :Date
  });
 
  //load products collection
@@ -234,9 +234,6 @@ router.post('/api/transactions', (req, res) => {
 
                     var query = inc("userid")
 
-                    query.exec((err, count) => {
-                    newTransactionM.set({id:count.seq})
-                    })
 
                     clientPhone = req.body.clientPhone
                     
@@ -308,9 +305,15 @@ router.post('/api/transactions', (req, res) => {
                     newTransactionM.set(req.body)
 
                     newTransactionM.date = Date.now()
-                    newTransactionM.save().then(() => {  
-                        res.send(newTransactionM)
-                    })
+
+                    query.exec((err, count) => {
+                        // newTransactionM.set({id:count.seq})
+                        newTransactionM.id = count.seq
+                        newTransactionM.save((err, transaction)=>{
+                            console.log(transaction)
+                            res.send(transaction)
+                        })
+                        })
                 }
             }
         })
