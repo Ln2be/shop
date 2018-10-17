@@ -6,15 +6,13 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 //Create Connections to mongo
-var conn = mongoose.createConnection('mongodb://localhost/mydbHim');
-var conn2 = mongoose.createConnection('mongodb://localhost/mydbHim');
+var conn = mongoose.createConnection('mongodb://localhost/mydbEl');
+var conn2 = mongoose.createConnection('mongodb://localhost/mydbEl');
 
-var conn3 = mongoose.createConnection('mongodb://localhost/mydbHim');
-var conn4 = mongoose.createConnection('mongodb://localhost/mydbHim');
+var conn3 = mongoose.createConnection('mongodb://localhost/mydbEl');
+var conn4 = mongoose.createConnection('mongodb://localhost/mydbEl');
 
-var conn5 = mongoose.createConnection('mongodb://localhost/mydbHim');
-
-
+var conn5 = mongoose.createConnection('mongodb://localhost/mydbEl');
 
 
 const TransactionM = conn2.model('transactions', { id:Number , clientPhone: String,
@@ -39,7 +37,6 @@ const schema = new Schema({ _id: String, seq: Number})
 const CounterM = conn5.model('counters', schema);
 
 
-
 CounterM.findOne({_id:"userid"}, (counter, err)=>{
 if(!counter){
     
@@ -52,12 +49,11 @@ if(!counter){
 }
 })
 
-
 inc = function(name){
       return  CounterM.findByIdAndUpdate({_id:name}, {$inc: {seq: 1}}, {new:true})
 }
 
-
+var query = inc("userid");
 
 //load low quantity products
 const Lq_productM = conn3.model('lq_products', { name: String, quantity: Number});
@@ -74,7 +70,6 @@ const clientSchema = mongoose.Schema(
     }
 )
 
-
 //Load clients
 const ClientM = conn4.model('clients', clientSchema);
 
@@ -87,10 +82,8 @@ router.get('/api/transactions', (req, res) => {
     })
 })
 
-
 //Send the requested post
 router.get('/api/transactions/:id', (req, res) => {
-    console.log("Came")
 
     var id = req.param("id")
     TransactionM.findOne({id:id}, (err, rtransaction) => {
@@ -103,73 +96,77 @@ router.get('/api/transactions/:id', (req, res) => {
 router.delete('/api/transactions/:id', (req, res) => {
 
     id = req.param("id");
-    j=0;
 
-    TransactionM.findOne({id:id}, (err, transaction) => {
-        if(transaction){
+    //Another way of doing it
 
-             //Itrate through products, save transactions, update products and low quantity 
-            //products if necessary
-            var productLength = transaction.product.length;
-            for(var i=0; i<productLength; i++) {
+    //Get the transaction
+    pTransaction = TransactionM.findOne({id:id}).exec();
+
+    var promises =[];
+
+    //Search for all the products and update them
+    pTransaction.then((transaction)=>{
+
+        rtransaction = transaction;
+        console.log(rtransaction)
+        //Update the products after deleting the transaction (rProduct : returned product)
+        //(sProduct : existed product in the stock)
+        for(let rProduct of transaction.product){
                 
-                //Update the product
-                let p_name = transaction.product[i].name;
-                let p_quantity = transaction.product[i].quantity
+            promises.push(ProductM.findOne({name:rProduct.name}).exec((err, sProduct)=>{
 
+            
+                //Save the quantity to update low quantity products
+                quantity = sProduct.quantity
 
-                ProductM.findOne({name:p_name}).exec((err, product) => {
-                    if(product)
-                    {
-                        //Update the product
-                        quantity = product.quantity;
+                //Update the product quantity and save it
+                sProduct.quantity = sProduct.quantity + rProduct.quantity;
+                sProduct.save();
 
-                        product.quantity = product.quantity + p_quantity;
-                        product.save((err) => {
-                            if(err) console.log(err)
-                        })
+                //Condition to remove low quantity product
+                needRemove = quantity<100 && sProduct.quantity > 100;
+                if(needRemove){
+                    Lq_productM.findOneAndDelete({name:sProduct.name}).exec();
+                }
 
-                        goOut = quantity<100 && product.quantity>=100
-                        if(goOut){
-                            Lq_productM.findOneAndDelete({name:product.name}, (err, lq_product) => {
+                //Condition to update low quantity product
+                needUpdate = quantity < 100 && sProduct.quantity < 100
+                if(needUpdate){
+                    Lq_productM.findOne({name:sProduct.name}).exec((err, lqproduct)=>{
+                        lqproduct.quantity = sProduct.quantity
+                    })
+                }
 
-                        })
-                        }
-                        else
-                        {
-                            remainInLQ = product.quantity<100
-                            if(remainInLQ){
+            }))          
+        }
 
-                                Lq_productM.findOne({name:product.name}).exec((err, lq_product) => {
-                                    lq_product.quantity = lq_product + p_quantity;
-                                    lq_product.save((err) => {
-                                        console.log(err)
-                                    })
-                                })
+        // Remove the transaction from client history of transactions
+        phone = transaction.clientPhone;
+        promises.push(
+            //Find the client history
+            ClientM.findOne({phone:phone}).exec().then(
+                (client)=>{
+                    client.transaction.forEach(
+                        (cTransaction, index ,cTransactions)=>{
+                            if(cTransaction._id == transaction._id){
+                                cTransactions.splice(index, 1)
                             }
                         }
-                    }
-                    else{
-
-                        if (err) console.log(err)
-                    }
-
-                    j = j + 1;
-                    isLastCall = j==productLength;
-
-                    if(isLastCall){
-                        TransactionM.findOneAndDelete({id:id}, (err, transaction) => {
-                            res.send(transaction)
-                        })
-                    }
-
-
-                })
-            }   
-        }
+                    )
+                }
+            )
+        )
     })
 
+    //Delete the transaction after finishing updating the products
+    Promise.all(promises).then((results)=>{
 
+        TransactionM.findOneAndDelete({id:id}).exec().then(
+            (tr)=>{
+                res.send(tr)
+            }
+        )
+    })
 })
 
 //Add a post
@@ -178,153 +175,128 @@ router.post('/api/transactions', (req, res) => {
     //The transaction we're preparing to send
     let newTransactionM = new TransactionM();
 
-    var j = 0;
-
-    var productLength = req.body.product.length;
-    for(var i=0; i<productLength; i++) {
-
-        var quantitiesAvailable =true
-        var productsAvailable = true
-       
-        //Get the product properties
-        let p_name = req.body.product[i].name;
-        let p_quantity = req.body.product[i].quantity
-
-
-        ProductM.findOne({name:p_name}).exec((err, product) => {
-            if(product)
-            {
-                //If the requested quantity is bigger than what we have in the stock than show error
-                if(product.quantity<p_quantity){
-
-                    quantitiesAvailable=false
-
-                    newTransactionM.product.push(                           
-                         {
-                        "name": p_name,
-                        "quantity": product.quantity
-                    })  
-                }
-            }
-            else{
-
-                productsAvailable = false
-
-                newTransactionM.product.push(               
-               {
-                    "name": p_name,
-                    "quantity": 0
-                })
-
-        
-    
-            }
-
-            j = j + 1;
-            isLastCall = j==productLength;
-
-            if(isLastCall){
-
-                if(!quantitiesAvailable || !productsAvailable){
-
-                    res.send(newTransactionM)
-
-                }else
-                {
-
-                    var query = inc("userid")
-
-
-                    clientPhone = req.body.clientPhone
-                    
-                    for(var i=0; i<productLength; i++) {
-
-                        //Get the product properties
-                        let p_name = req.body.product[i].name;
-                        let uProduct = req.body.product[i]
-
-                        ProductM.findOne({name:p_name}).exec((err, product) => {
-
-                            quantity = product.quantity
-                            
-                            updateProduct(product, uProduct)
-
-                            existInLQ = quantity<100 
-                            enterLQ = product.quantity<100
-
-                            if(existInLQ){
-                                updateLQProduct(product)
-                            }else 
-
-                            if(enterLQ){
-                                createLQProduct(product)
-                            }
-                        })
-                    }
-                    
-                    ClientM.findOne({phone:clientPhone}).exec((err, client) => {
-
-                        if(!client) var client = new ClientM({phone:clientPhone});
-
-                        if(client){
-
-                            client.transaction.push(newTransactionM)
-
-                            // lenT = client.transaction.length;
-                            
-                            // client.transaction[lenT] = {
-                            //     id: newTransactionM.id,
-                            //     product: []
-                            // }
-
-
-                            // for(var i=0; i<productLength; i++){
-
-                            //     //Get the product properties
-                            //     let p_name = req.body.product[i].name;
-                            //     let p_quantity = req.body.product[i].quantity
-
-                            //     lenP = client.transaction[lenT].product.length;
-
-                            //     client.transaction[lenT].product[lenP] = {
-                            //         name: p_name,
-                            //         quantity: p_quantity
-                            //     }
-
-                            // }
-
-                            client.save((err) => {
-                                console.log(err)
-                            })
-                        }
-
-                        //Show error if any
-                        if(err) console.log(err)
-                    })
-
-                    newTransactionM.set(req.body)
-
-                    newTransactionM.date = Date.now()
-
-                    query.exec((err, count) => {
-                        // newTransactionM.set({id:count.seq})
-                        newTransactionM.id = count.seq
-                        newTransactionM.save((err, transaction)=>{
-                            console.log(transaction)
-                            res.send(transaction)
-                        })
-                        })
-                }
-            }
-        })
+    //Create pseudo transaction to hold error in the products
+    var erTransaction = {
+        product: []
     }
+
+    
+    var promises = []
+
+    //Demanded products
+    var dProducts = req.body.product;
+    
+    //Search for all the products in the database 
+    for(dProduct of dProducts) {
+        
+        promises.push(
+            ProductM.findOne({name:dProduct.name}).exec()
+        )
+    }
+
+
+    //Track transaction readiness
+    var TransactionReady = true;
+
+    //Test if transaction is ready for submitting
+    var promise = Promise.all(promises).then((eProducts)=>{
+        
+        eProducts.forEach((eProduct, index, eProducts)=>{
+
+            //Test if some products doent exist and send them to user 
+            if(!eProduct){
+
+                TransactionReady = false;
+
+                erTransaction.product.push(
+                    {
+                        name:dProducts[index].name,
+                        quantity: "-"
+                    }
+                )
+            }else
+
+            //Test if some products is not suffisant for the demanded quantity
+            if(eProduct.quantity < dProducts[index].quantity){
+
+                TransactionReady = false
+
+                erTransaction.product.push(
+                    {
+                        name:dProducts[index].name,
+                        quantity:eProduct.quantity
+                    }
+                )
+
+            } 
+        })
+
+        if(!TransactionReady) res.send(erTransaction)
+    },
+    (reason)=>{
+        console.log(reason)
+    })
+
+    //Update product if the transaction is ready and save it
+    promise.then(()=>{
+        if(TransactionReady){
+
+            //Update the products after the transaction
+            Promise.all(promises).then(
+                (eProducts)=>{
+                    eProducts.forEach(
+                        (eProduct,i)=>{
+    
+                            //Save the product quantity for updating low quantity products
+                            quantity = eProduct.quantity
+    
+                            //Update the product quantity
+                            eProduct.quantity = eProduct.quantity - dProducts[i].quantity
+    
+                            eProduct.save()
+    
+                            //Check if we have to update low quantity product
+    
+                            needUpdate = quantity < 100 || eProduct.quantity < 100;
+    
+                            if(needUpdate){
+    
+                                updateLQProduct(eProduct)
+                            }
+                        }
+                    )
+                }
+            )
+    
+            //Update client
+            updateClient(req.body.clientPhone, req.body)
+    
+            //save the transaction
+            query.exec((err, count)=>{
+                newTransactionM.id = count.seq;
+    
+    
+                newTransactionM.set(req.body)
+                newTransactionM.date = Date.now();
+    
+    
+                newTransactionM.save((err, transaction)=>{
+                    res.send(transaction)
+                })
+            })
+    
+    
+        }
+    })
+
 })
 
+//Update a product from another product (uFProduct : update from product)
+updateProduct = function(product, uFProduct){
 
-updateProduct = function(product, uProduct){
-
-    //Update the product quantity 
-    product.quantity = product.quantity - uProduct.quantity;
+    //Update the product quantity
+    product.name = uFProduct.name 
+    product.quantity = product.quantity - uPFroduct.quantity;
     product.save((err) => {
         if(err) console.log(err)
     })
@@ -334,27 +306,27 @@ updateLQProduct = function(product){
 
     Lq_productM.findOne({name:product.name}).exec((err, result) => {
 
+        if(!result) result = new Lq_productM() 
+
+        result.name = product.name
         result.quantity = product.quantity;
 
-        result.save((err) => {
-           if(err) console.log(err)
+        result.save()
+    })
+}
+
+updateClient = function(phone, transaction){
+
+    ClientM.findOne({phone:phone}).exec((err, result) => {
+
+        if(!result) result = new ClientM({
+            phone:phone
         })
+
+        result.transaction.push(transaction)
+
+        result.save()
     })
 }
-
-createLQProduct = function(product){
-
-    var lqp = new Lq_productM({
-        name: product.name,
-        quantity: product.quantity
-    })
-
-    lqp.save((err) => {
-       if(err) console.log(err)
-    })
-}
-
-
-
 
 module.exports = router;

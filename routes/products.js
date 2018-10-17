@@ -3,8 +3,8 @@ const router = express.Router()
 
 const mongoose = require('mongoose');
 
-var conn = mongoose.createConnection('mongodb://localhost/mydbHim');
-var conn2 = mongoose.createConnection('mongodb://localhost/mydbHim');
+var conn = mongoose.createConnection('mongodb://localhost/mydbEl');
+var conn2 = mongoose.createConnection('mongodb://localhost/mydbEl');
 
 const ProductM = conn.model('products', { name: String, price: Number, s_price: Number, quantity: Number});
 
@@ -31,11 +31,12 @@ router.get('/api/products/:name', (req, res) => {
     })
 })
 
-
 //Delete the post
 router.delete('/api/products/:id', (req, res) => {
-    var id = mongoose.Types.ObjectId(req.param("id"));
-    ProductM.findByIdAndRemove(id, (err, rproduct) => {
+
+    var name = req.param("id")
+
+    ProductM.findOneAndDelete({name:name}, (err, rproduct) => {
         res.send(rproduct)
     })
 })
@@ -62,7 +63,7 @@ router.post('/api/products', (req, res) => {
             quantity = product.quantity;
 
             //Update the product quantity 
-            product.quantity = product.quantity + p_quantity;
+            product.quantity = product.quantity + +p_quantity;
             product.save((err) => {
                 if(err) console.log(err)
             })
@@ -100,7 +101,6 @@ router.post('/api/products', (req, res) => {
     res.send(req.body)
 
 })
-
 
 //Update the post
 router.put('/api/products/:id', (req, res) => {
