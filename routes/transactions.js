@@ -6,13 +6,13 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 //Create Connections to mongo
-var conn = mongoose.createConnection('mongodb://localhost/mydbAli');
-var conn2 = mongoose.createConnection('mongodb://localhost/mydbAli');
+var conn = mongoose.createConnection('mongodb://localhost/mydbHim');
+var conn2 = mongoose.createConnection('mongodb://localhost/mydbHim');
 
-var conn3 = mongoose.createConnection('mongodb://localhost/mydbAli');
-var conn4 = mongoose.createConnection('mongodb://localhost/mydbAli');
+var conn3 = mongoose.createConnection('mongodb://localhost/mydbHim');
+var conn4 = mongoose.createConnection('mongodb://localhost/mydbHim');
 
-var conn5 = mongoose.createConnection('mongodb://localhost/mydbAli');
+var conn5 = mongoose.createConnection('mongodb://localhost/mydbHim');
 
 
 const TransactionM = conn2.model('transactions', { id:Number , clientPhone: String,

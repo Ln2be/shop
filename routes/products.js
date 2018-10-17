@@ -3,8 +3,8 @@ const router = express.Router()
 
 const mongoose = require('mongoose');
 
-var conn = mongoose.createConnection('mongodb://localhost/mydbAli');
-var conn2 = mongoose.createConnection('mongodb://localhost/mydbAli');
+var conn = mongoose.createConnection('mongodb://localhost/mydbHim');
+var conn2 = mongoose.createConnection('mongodb://localhost/mydbHim');
 
 const ProductM = conn.model('products', { name: String, price: Number, s_price: Number, quantity: Number});
 

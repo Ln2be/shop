@@ -2,7 +2,7 @@ const express = require('express')
 const router = express.Router()
 
 const mongoose = require('mongoose');
-mongoose.connect('mongodb://localhost/mydbAli', { useNewUrlParser: true   });
+mongoose.connect('mongodb://localhost/mydbHim', { useNewUrlParser: true   });
 
 const ClientM = mongoose.model('clients',
 { phone: Number,
